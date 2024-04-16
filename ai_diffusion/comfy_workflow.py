@@ -737,6 +737,9 @@ class ComfyWorkflow:
     def compile_model(self, model: Output):
         return self.add("TorchCompileModel", 1, model=model, backend="inductor")
 
+    def apply_perturbed_attention_guidance(self, model: Output):
+        return self.add("PerturbedAttentionGuidance", 1, model=model)
+
     def inpaint_preprocessor(self, image: Output, mask: Output, fill_black=False):
         return self.add(
             "InpaintPreprocessor", 1, image=image, mask=mask, black_pixel_for_xinsir_cn=fill_black

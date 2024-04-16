@@ -65,6 +65,7 @@ class CheckpointInput:
     dynamic_caching: bool = False
     compile_model: bool = False
     tiled_vae: bool = False
+    perturbed_attention_guidance: bool = False
 
 
 @dataclass
