@@ -619,6 +619,10 @@ class PerformanceSettings(SettingsTab):
         self._dynamic_caching.value_changed.connect(self.write)
         self._layout.addWidget(self._dynamic_caching)
 
+        self._compile_model = SwitchSetting(Settings._compile_model, parent=self)
+        self._compile_model.value_changed.connect(self.write)
+        self._layout.addWidget(self._compile_model)
+
         self._layout.addStretch()
 
     def _change_performance_preset(self, index):
@@ -660,6 +664,7 @@ class PerformanceSettings(SettingsTab):
         self._max_pixel_count.value = settings.max_pixel_count
         self._tiled_vae.value = settings.tiled_vae
         self._dynamic_caching.value = settings.dynamic_caching
+        self._compile_model.value = settings.compile_model
         self.update_client_info()
 
     def _write(self):
@@ -673,6 +678,7 @@ class PerformanceSettings(SettingsTab):
             self._performance_preset.currentIndex()
         ]
         settings.dynamic_caching = self._dynamic_caching.value
+        settings.compile_model = self._compile_model.value
 
 
 class AboutSettings(SettingsTab):

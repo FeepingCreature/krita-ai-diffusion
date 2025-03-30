@@ -81,6 +81,7 @@ class PerformanceSettings:
     resolution_multiplier: float = 1.0
     max_pixel_count: int = 6
     dynamic_caching: bool = False
+    compile_model: bool = False
     tiled_vae: bool = False
 
 
@@ -290,6 +291,13 @@ class Settings(QObject):
         _("Dynamic Caching"),
         False,
         _("Re-use outputs of previous steps (First Block Cache) to speed up generation."),
+    )
+
+    compile_model: bool
+    _compile_model = Setting(
+        _("Compile Model"),
+        False,
+        _("Compile the model. Delays initial generation but can increase speed."),
     )
 
     tiled_vae: bool

@@ -489,6 +489,7 @@ class ComfyClient(Client):
             max_pixel_count=settings.max_pixel_count,
             tiled_vae=settings.tiled_vae,
             dynamic_caching=settings.dynamic_caching and self.features.wave_speed,
+            compile_model=settings.compile_model,
         )
 
     async def upload_loras(self, work: WorkflowInput, local_job_id: str):

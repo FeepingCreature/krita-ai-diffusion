@@ -153,6 +153,9 @@ def load_checkpoint_with_lora(w: ComfyWorkflow, checkpoint: CheckpointInput, mod
     if arch.supports_attention_guidance and checkpoint.self_attention_guidance:
         model = w.apply_self_attention_guidance(model)
 
+    if checkpoint.compile_model:
+        model = w.compile_model(model)
+
     return model, Clip(clip, arch), vae
 
 
@@ -1314,6 +1317,7 @@ def prepare(
     i.conditioning.positive += _collect_lora_triggers(i.models.loras, files)
     i.models.loras = unique(i.models.loras + extra_loras, key=lambda l: l.name)
     i.models.dynamic_caching = perf.dynamic_caching
+    i.models.compile_model = perf.compile_model
     i.models.tiled_vae = perf.tiled_vae
     arch = i.models.version = resolve_arch(style, models)
 
