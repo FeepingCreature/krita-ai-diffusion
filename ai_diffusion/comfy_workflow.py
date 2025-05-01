@@ -297,6 +297,10 @@ class ComfyWorkflow:
         if model_version is Arch.flux:
             positive = self.flux_guidance(positive, cfg if cfg > 1 else 3.5)
             guider = self.basic_guider(model, positive)
+        elif model_version is Arch.chroma:
+            positive = self.remove_padding(positive)
+            negative = self.remove_padding(negative)
+            guider = self.cfg_guider(model, positive, negative, cfg)
         else:
             guider = self.cfg_guider(model, positive, negative, cfg)
 
@@ -434,6 +438,9 @@ class ComfyWorkflow:
             return self.add_cached("UnetLoaderGGUF", 1, unet_name=model_name)
         return self.add_cached("UNETLoader", 1, unet_name=model_name, weight_dtype="default")
 
+    def load_chroma_diffusion_model(self, model_name: str):
+        return self.add_cached("ChromaDiffusionLoader", 1, unet_name=model_name, quant_mode="bf16")
+
     def load_clip(self, clip_name: str, type: str):
         return self.add_cached("CLIPLoader", 1, clip_name=clip_name, type=type)
 
@@ -507,6 +514,9 @@ class ComfyWorkflow:
 
     def clip_text_encode(self, clip: Output, text: str | Output):
         return self.add("CLIPTextEncode", 1, clip=clip, text=text)
+
+    def remove_padding(self, clip: Output):
+        return self.add("ChromaPaddingRemoval", 1, conditioning=clip)
 
     def conditioning_area(self, conditioning: Output, area: Bounds, strength=1.0):
         return self.add(

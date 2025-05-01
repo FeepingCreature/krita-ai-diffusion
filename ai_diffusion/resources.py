@@ -80,12 +80,15 @@ class Arch(Enum):
     flux = "Flux"
     illu = "Illustrious"
     illu_v = "Illustrious v-prediction"
+    chroma = "Chroma Diffusion"
 
     auto = "Automatic"
     all = "All"
 
     @staticmethod
-    def from_string(string: str, model_type: str = "eps"):
+    def from_string(string: str, model_type: str, filename: str):
+        if filename.startswith("chroma"):
+            return Arch.chroma
         if string == "sd15":
             return Arch.sd15
         if string == "sdxl" and model_type == "v-prediction":
@@ -100,6 +103,8 @@ class Arch(Enum):
             return Arch.illu
         if string == "illu_v":
             return Arch.illu_v
+        if string == "chroma":
+            return Arch.chroma
         return None
 
     @staticmethod
@@ -156,15 +161,17 @@ class Arch(Enum):
                 return ["clip_l", "clip_g"]
             case Arch.flux:
                 return ["clip_l", "t5"]
+            case Arch.chroma:
+                return ["t5"]
         raise ValueError(f"Unsupported architecture: {self}")
 
     @staticmethod
     def list():
-        return [Arch.sd15, Arch.sdxl, Arch.sd3, Arch.flux, Arch.illu, Arch.illu_v]
+        return [Arch.sd15, Arch.sdxl, Arch.sd3, Arch.flux, Arch.illu, Arch.illu_v, Arch.chroma]
 
     @staticmethod
     def list_strings():
-        return ["sd15", "sdxl", "sd3", "flux", "flux-schnell"]
+        return ["sd15", "sdxl", "sd3", "flux", "flux-schnell", "chroma"]
 
 
 class ResourceKind(Enum):
@@ -618,10 +625,12 @@ search_paths: dict[str, list[str]] = {
     resource_id(ResourceKind.text_encoder, Arch.all, "clip_l"): ["clip_l"],
     resource_id(ResourceKind.text_encoder, Arch.all, "clip_g"): ["clip_g"],
     resource_id(ResourceKind.text_encoder, Arch.all, "t5"): ["t5"],
+    resource_id(ResourceKind.text_encoder, Arch.chroma, "chroma"): ["t5xxl_fp8_e4m3fn"],
     resource_id(ResourceKind.vae, Arch.sd15, "default"): ["vae-ft-mse-840000-ema"],
     resource_id(ResourceKind.vae, Arch.sdxl, "default"): ["sdxl_vae"],
     resource_id(ResourceKind.vae, Arch.sd3, "default"): ["sd3"],
     resource_id(ResourceKind.vae, Arch.flux, "default"): ["flux", "ae.s"],
+    resource_id(ResourceKind.vae, Arch.chroma, "default"): ["ae"],
 }
 # fmt: on
 

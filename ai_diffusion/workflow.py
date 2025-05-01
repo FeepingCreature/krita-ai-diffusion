@@ -98,7 +98,10 @@ def load_checkpoint_with_lora(w: ComfyWorkflow, checkpoint: CheckpointInput, mod
         case FileFormat.checkpoint:
             model, clip, vae = w.load_checkpoint(model_info.filename)
         case FileFormat.diffusion:
-            model = w.load_diffusion_model(model_info.filename)
+            if arch is Arch.chroma:
+                model = w.load_chroma_diffusion_model(model_info.filename)
+            else:
+                model = w.load_diffusion_model(model_info.filename)
         case _:
             raise RuntimeError(
                 f"Style checkpoint {checkpoint.checkpoint} has an unsupported format {model_info.format.name}"
@@ -118,6 +121,8 @@ def load_checkpoint_with_lora(w: ComfyWorkflow, checkpoint: CheckpointInput, mod
                     clip = w.load_dual_clip(te["clip_g"], te["clip_l"], type="sd3")
             case Arch.flux:
                 clip = w.load_dual_clip(te["clip_l"], te["t5"], type="flux")
+            case Arch.chroma:
+                clip = w.load_clip(te["chroma"], type="stable_diffusion")
             case _:
                 raise RuntimeError(f"No text encoder for model architecture {arch.name}")
 

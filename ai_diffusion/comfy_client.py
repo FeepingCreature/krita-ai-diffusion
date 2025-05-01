@@ -422,7 +422,7 @@ class ComfyClient(Client):
             parsed = (
                 (
                     filename,
-                    Arch.from_string(info["base_model"], info.get("type", "eps")),
+                    Arch.from_string(info["base_model"], info.get("type", "eps"), filename),
                     info.get("is_inpaint", False),
                     info.get("is_refiner", False),
                 )
@@ -631,10 +631,12 @@ def find_model(model_list: Sequence[str], id: ResourceId):
 
 def _find_text_encoder_models(model_list: Sequence[str]):
     kind = ResourceKind.text_encoder
-    return {
+    ret = {
         resource_id(kind, Arch.all, te): _find_model(model_list, kind, Arch.all, te)
         for te in ["clip_l", "clip_g", "t5"]
     }
+    ret[resource_id(kind, Arch.chroma, "chroma")] = _find_model(model_list, kind, Arch.chroma, "chroma")
+    return ret
 
 
 def _find_control_models(model_list: Sequence[str]):
