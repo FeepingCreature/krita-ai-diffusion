@@ -15,9 +15,6 @@ from .resources import CustomNode, ResourceId
 from .localization import translate as _
 from .util import client_logger as log
 
-# minsky91
-from .image import Image
-
 
 class ClientEvent(Enum):
     progress = 0
@@ -31,8 +28,6 @@ class ClientEvent(Enum):
     published = 8
     output = 9
     payment_required = 10
-    # minsky91: added progress preview
-    progress_preview = 11
 
 
 class TextOutput(NamedTuple):
@@ -57,11 +52,6 @@ class ClientMessage(NamedTuple):
     images: ImageCollection | None = None
     result: ClientOutput | None = None
     error: str | None = None
-    # minsky91: added progress preview, extended job stats & metadata 
-    preview: Image | None = None
-    metadata: list[str] | None = None
-    workflow: str = ""
-    # end of minsky91 additions
 
 
 class User(QObject, ObservableProperties):
@@ -282,7 +272,6 @@ class ClientFeatures(NamedTuple):
     max_upload_size: int = 0
     max_control_layers: int = 1000
     wave_speed: bool = False
-    gguf: bool = False
 
 
 class Client(ABC):

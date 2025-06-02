@@ -24,7 +24,6 @@ class ServerBackend(Enum):
     cuda = (_("Use CUDA (NVIDIA GPU)"), not is_macos)
     mps = (_("Use MPS (Metal Performance Shader)"), is_macos)
     directml = (_("Use DirectML (GPU)"), is_windows)
-    xpu = (_("Use XPU (Intel GPU)"), not is_macos)
 
     @staticmethod
     def supported():
@@ -67,13 +66,6 @@ class PerformancePreset(Enum):
     cloud = _("Cloud")
     custom = _("Custom")
 
-# minsky91
-class Verbosity(Enum):
-    essential = 0
-    medium = 1
-    verbose = 2
-# end of minsky91 additions
-
 
 class PerformancePresetSettings(NamedTuple):
     batch_size: int = 4
@@ -88,7 +80,6 @@ class PerformanceSettings:
     resolution_multiplier: float = 1.0
     max_pixel_count: int = 6
     dynamic_caching: bool = False
-    compile_model: bool = False
     tiled_vae: bool = False
 
 
@@ -107,6 +98,7 @@ class Setting:
             return EnumType[s]
         except KeyError:
             return self.default
+
 
 class Settings(QObject):
     default_path = user_data_dir / "settings.json"
@@ -235,9 +227,9 @@ class Settings(QObject):
 
     apply_behavior_live: ApplyBehavior
     _apply_behavior_live = Setting(
-        _("Apply Behavior (Live)"),
+        "Apply Behavior (Live)",
         ApplyBehavior.replace,
-        _("Choose how result images are applied to the canvas in Live mode"),
+        "Choose how result images are applied to the canvas in Live mode",
     )
 
     apply_region_behavior_live: ApplyRegionBehavior
@@ -299,13 +291,6 @@ class Settings(QObject):
         _("Re-use outputs of previous steps (First Block Cache) to speed up generation."),
     )
 
-    compile_model: bool
-    _compile_model = Setting(
-        _("Compile Model"),
-        False,
-        _("Compile the model. Delays initial generation but can increase speed."),
-    )
-
     tiled_vae: bool
     _tiled_vae = Setting(
         _("Tiled VAE"),
@@ -348,70 +333,6 @@ class Settings(QObject):
         False,
         _("Write latest ComfyUI prompt to the log folder for test & debug"),
     )
-
-    # minsky91
-    enable_TD: bool
-    _enable_TD = Setting(
-        _("Enable Tiled Diffusion"), False, _("Enable Tiled Diffusion (MoD method), tiled VAE encode & decode")
-    )
-    
-    TD_res_threshold: int
-    _TD_res_threshold = Setting(
-        _("TD Activate Resolution"), 0, _("Minimum image resolution to activate Tiled Diffusion, in K pixels")
-    )
-
-    hiresfix_guidance: int
-    _hiresfix_guidance = Setting(
-        _("Hiresfix Guidance"), 0, _("Hiresfix fidelity when refining generated hires images")
-    )
-    
-    upload_method: str
-    _upload_method = Setting(
-        _("Upload Method"), "None", _("Upload method for submitting input images, binary or text-encoded")
-    )
-    
-    fast_receive: bool
-    _fast_receive = Setting(
-        _("Fast Receive"), False, _("Receive images using http protocol instead of slow websockets")
-    )
-    
-    jpeg_res_threshold: int
-    _jpeg_res_threshold = Setting(
-        _("Lowest Jpeg Resolution"), 10, _("Min. image resolutiion to switch to jpeg in image transfers, in K pixels")
-    )
-
-    temp_files_receive: bool
-    _temp_files_receive = Setting(
-        _("Use Temporary Files (testing only)"), False, _("Receive images using server\'s temporary file storage")
-    )
-    
-    progress_preview: bool
-    _progress_preview = Setting(
-        _("Progress Preview"), False, _("Display generation progress in the preview layer")
-    )
-    
-    save_gen_data: list[str]
-    _save_gen_data = Setting(
-        _("Save Gen Data"), 
-        list(), 
-        _("Save generation data alongside the Save Image png file")
-    )
-    
-    metadata_verbosity: Verbosity
-    _metadata_verbosity = Setting(
-        _("Metadata Verbosity"), 
-        0, 
-        _("Level of metadata verbosity")
-    )
-    
-    logfile_verbosity: Verbosity
-    _logfile_verbosity = Setting(
-        _("Logfile Verbosity"), 
-        0, 
-        _("Level of client.log message verbosity")
-    )
-
-    # end of minsky91 additions
 
     document_defaults: dict[str, Any]
     _document_defaults = Setting(_("Document Defaults"), {}, _("Recently used document settings"))

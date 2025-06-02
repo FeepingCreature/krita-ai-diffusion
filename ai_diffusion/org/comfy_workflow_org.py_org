@@ -10,22 +10,6 @@ from .image import Bounds, Extent, Image, ImageCollection
 from .resources import Arch, ControlMode
 from .util import base_type_match, client_logger as log
 
-# minsky91
-from .settings import settings
-from binascii import crc32
-
-# produce a unique CRC32-based id of an image (includes a simplified version of Image.to_array())
-def image_uid(image: Image):
-    #return id(image)    # the simplest one, but not good enough for the purpose
-    image.to_numpy_format()
-    w, h = image.extent
-    c = 4 if image.is_rgba else 1
-    bits = image._qimage.constBits()
-    return crc32(bits.asarray(w * h * c))    
-    #return id(image)
-
-# end of minsky91 additions
-
 
 class ComfyRunMode(Enum):
     runtime = 0  # runs as part of same process, transfer images in memory
@@ -75,8 +59,6 @@ class ComfyWorkflow:
         self._cache: dict[str, Output | Output2 | Output3 | Output4] = {}
         self._nodes_inputs: dict[str, dict[str, Any]] = node_inputs or {}
         self._run_mode: ComfyRunMode = run_mode
-        # minsky91: support for loading transient images stored in binary or text-encoded format
-        self.image_uids: list[int] = []
 
     @staticmethod
     def import_graph(existing: dict, node_inputs: dict):
@@ -84,8 +66,6 @@ class ComfyWorkflow:
         existing = _convert_ui_workflow(existing, node_inputs)
         node_map: dict[str, str] = {}
         queue = list(existing.keys())
-        times_queued: dict[str, int] = {}
-        # Re-order nodes such that a nodes inputs are always processed before the node itself.
         while queue:
             id = queue.pop(0)
             node = deepcopy(existing[id])
@@ -94,20 +74,12 @@ class ComfyWorkflow:
                 log.warning(f"Workflow import: Node {id} is not installed, aborting.")
                 return w
             if node_inputs and class_type not in node_inputs:
-                log.warning(
+                raise ValueError(
                     f"Workflow contains a node of type {class_type} which is not installed on the ComfyUI server."
                 )
             edges = [e for e in node["inputs"].values() if isinstance(e, list)]
             if any(e[0] not in node_map for e in edges):
-                count = times_queued.setdefault(id, 0)
-                if count > len(existing):
-                    log.warning(
-                        "Failed to import custom workflow, the graph appears to contain a loop."
-                    )
-                    return w
-                # re-queue node if an input is not yet mapped
-                queue.append(id)
-                times_queued[id] += 1
+                queue.append(id)  # requeue node if an input is not yet mapped
                 continue
 
             for e in edges:
@@ -232,15 +204,6 @@ class ComfyWorkflow:
         self.images[id] = image
         return id
 
-    # minsky91: support for loading transient images stored in binary or text-encoded format
-    def add_image_uid(self, uid):
-        if not uid in self.image_uids:
-            self.image_uids.append(uid)
-
-    def get_image_uids(self):
-        return self.image_uids
-    # end of minsky91 additions
-
     # Nodes
 
     def ksampler(
@@ -324,10 +287,6 @@ class ComfyWorkflow:
         if model_version is Arch.flux:
             positive = self.flux_guidance(positive, cfg if cfg > 1 else 3.5)
             guider = self.basic_guider(model, positive)
-        elif model_version is Arch.chroma:
-            positive = self.remove_padding(positive)
-            negative = self.remove_padding(negative)
-            guider = self.cfg_guider(model, positive, negative, cfg)
         else:
             guider = self.cfg_guider(model, positive, negative, cfg)
 
@@ -465,9 +424,6 @@ class ComfyWorkflow:
             return self.add_cached("UnetLoaderGGUF", 1, unet_name=model_name)
         return self.add_cached("UNETLoader", 1, unet_name=model_name, weight_dtype="default")
 
-    def load_chroma_diffusion_model(self, model_name: str):
-        return self.add_cached("ChromaDiffusionLoader", 1, unet_name=model_name, quant_mode="bf16")
-
     def load_clip(self, clip_name: str, type: str):
         return self.add_cached("CLIPLoader", 1, clip_name=clip_name, type=type)
 
@@ -541,9 +497,6 @@ class ComfyWorkflow:
 
     def clip_text_encode(self, clip: Output, text: str | Output):
         return self.add("CLIPTextEncode", 1, clip=clip, text=text)
-
-    def remove_padding(self, clip: Output):
-        return self.add("ChromaPaddingRemoval", 1, conditioning=clip)
 
     def conditioning_area(self, conditioning: Output, area: Bounds, strength=1.0):
         return self.add(
@@ -771,14 +724,10 @@ class ComfyWorkflow:
     def apply_self_attention_guidance(self, model: Output):
         return self.add("SelfAttentionGuidance", 1, model=model, scale=0.5, blur_sigma=2.0)
 
-    def compile_model(self, model: Output):
-        return self.add("TorchCompileModel", 1, model=model, backend="inductor")
-
-    def apply_perturbed_attention_guidance(self, model: Output):
-        return self.add("PerturbedAttentionGuidance", 1, model=model)
-
-    def inpaint_preprocessor(self, image: Output, mask: Output):
-        return self.add("InpaintPreprocessor", 1, image=image, mask=mask)
+    def inpaint_preprocessor(self, image: Output, mask: Output, fill_black=False):
+        return self.add(
+            "InpaintPreprocessor", 1, image=image, mask=mask, black_pixel_for_xinsir_cn=fill_black
+        )
 
     def apply_fooocus_inpaint(self, model: Output, patch: Output, latent: Output):
         return self.add("INPAINT_ApplyFooocusInpaint", 1, model=model, patch=patch, latent=latent)
@@ -802,11 +751,13 @@ class ComfyWorkflow:
     def vae_encode_inpaint(self, vae: Output, image: Output, mask: Output):
         return self.add("VAEEncodeForInpaint", 1, vae=vae, pixels=image, mask=mask, grow_mask_by=0)
 
+    def vae_encode_tiled(self, vae: Output, image: Output):
+        return self.add("VAEEncodeTiled", 1, vae=vae, pixels=image, tile_size=512, overlap=64)
+
     def vae_decode(self, vae: Output, latent_image: Output):
         return self.add("VAEDecode", 1, vae=vae, samples=latent_image)
 
-    # minsky91: modified name to avoid clashes with TiledDiffusion logic
-    def vae_decode_tiled_512(self, vae: Output, latent_image: Output):
+    def vae_decode_tiled(self, vae: Output, latent_image: Output):
         return self.add(
             "VAEDecodeTiled", 1, vae=vae, samples=latent_image, tile_size=512, overlap=64
         )
@@ -963,20 +914,12 @@ class ComfyWorkflow:
         if self._run_mode is ComfyRunMode.runtime:
             return self._load_image_batch(image, self._load_image_runtime, self.batch_image)
         else:
-            # minsky91: support for loading transient images stored in binary or text-encoded format
-            if settings.upload_method != "None":
-                return self._load_image_batch(image, self._load_image_transient, self.batch_image)
-            # end of minsky91 additions
             return self._load_image_batch(image, self._load_image_base64, self.batch_image)
 
     def load_mask(self, mask: Image | ImageCollection):
         if self._run_mode is ComfyRunMode.runtime:
             return self._load_image_batch(mask, self._load_mask_runtime, self.batch_mask)
         else:
-            # minsky91: support for loading transient mask images stored in binary or text-encoded format
-            if settings.upload_method != "None":
-                return self._load_image_batch(mask, self._load_mask_transient, self.batch_mask)
-            # end of minsky91 additions
             return self._load_image_batch(mask, self._load_mask_base64, self.batch_mask)
 
     def _load_image_runtime(self, image: Image):
@@ -1004,22 +947,10 @@ class ComfyWorkflow:
     def load_image_and_mask(self, images: Image | ImageCollection):
         assert self._run_mode is ComfyRunMode.server
         if isinstance(images, Image):
-            # minsky91: support for loading transient images stored in binary or text-encoded format
-            if settings.upload_method != "None":
-                im_uid = image_uid(images)
-                self.add_image_uid(im_uid)
-                return self.add("ETN_LoadImageTransient", 2, uid=f"{im_uid}")
-            else:
-                return self.add("ETN_LoadImageBase64", 2, image=images.to_base64())
+            return self.add("ETN_LoadImageBase64", 2, image=images.to_base64())
         result = None
         for image in images:
-            # minsky91: support for loading transient images stored in binary or text-encoded format
-            if settings.upload_method != "None":
-                im_uid = image_uid(image)
-                self.add_image_uid(im_uid)
-                img, mask = self.add("ETN_LoadImageTransient", 2, uid=f"{im_uid}")
-            else:
-                img, mask = self.add("ETN_LoadImageBase64", 2, image=image.to_base64())
+            img, mask = self.add("ETN_LoadImageBase64", 2, image=image.to_base64())
             if result:
                 result = (self.batch_image(result[0], img), self.batch_mask(result[1], mask))
             else:
@@ -1031,26 +962,6 @@ class ComfyWorkflow:
         if self._run_mode is ComfyRunMode.runtime:
             return self.add("ETN_ReturnImage", 1, images=image)
         return self.add("ETN_SendImageWebSocket", 1, images=image, format="PNG")
-
-    # minsky91 (m91) / version with adaptable output format 
-
-    def send_image_http(self, image: Output, format: str, uid: str = ""):
-        return self.add("ETN_SendImagesTransient", 1, images=image, format=format, uid=uid)
-
-    def save_image_transient(self, image: Output, prefix: str):
-        return self.add("ETN_SaveTempImage", 1, images=image, filename_prefix=prefix)
-
-    def _load_image_transient(self, image: Image):
-        im_uid = image_uid(image)
-        self.add_image_uid(im_uid)
-        return self.add("ETN_LoadImageTransient", 1, uid=f"{im_uid}")
-
-    def _load_mask_transient(self, mask: Image):
-        mask_uid = image_uid(mask)
-        self.add_image_uid(mask_uid)
-        return self.add("ETN_LoadMaskTransient", 1, uid=f"{mask_uid}")
-
-    # end of minsky91 additions
 
     def save_image(self, image: Output, prefix: str):
         return self.add("SaveImage", 1, images=image, filename_prefix=prefix)
@@ -1186,36 +1097,7 @@ class ComfyWorkflow:
             set_cond_area="default",
         )
 
-# minsky91 / added experimental support for TiledDiffusion
 
-    def tiled_diffusion(
-        self,
-        model: Output,
-        method: str = "Mixture of Diffusers",
-        tile_width: int = 1024,
-        tile_height: int = 1024,
-        tile_overlap: int = 96,
-        tile_batch_size: int = 6,
-    ):
-        #log.info(f"tiled_diffusion: TD params tile width {tile_width} height {tile_height} overlap {tile_overlap} batch_size {tile_batch_size} method {method}")
-        return self.add(
-            "TiledDiffusion", 
-            1, 
-            model=model, 
-            method=method,
-            tile_width=tile_width, 
-            tile_height=tile_height, 
-            tile_overlap=tile_overlap, 
-            tile_batch_size=tile_batch_size,
-        )
-
-    def vae_decode_tiled(self, vae: Output, latent_image: Output, tile_size: int = 1024, overlap: int = 64, temporal_size: int = 64, temporal_overlap: int = 8):
-        return self.add("VAEDecodeTiled", 1, vae=vae, samples=latent_image, tile_size=tile_size, overlap=overlap, temporal_size=temporal_size, temporal_overlap=temporal_overlap)
-    def vae_encode_tiled(self, vae: Output, image: Output, tile_size: int = 1024, overlap: int = 64, temporal_size: int = 64, temporal_overlap: int = 8):
-        return self.add("VAEEncodeTiled", 1, pixels=image, vae=vae, tile_size=tile_size, overlap=overlap, temporal_size=temporal_size, temporal_overlap=temporal_overlap)
-       
-# end of minsky91 additions
-        
 def _inputs_for_node(node_inputs: dict[str, dict[str, Any]], node_name: str, filter=""):
     inputs = node_inputs.get(node_name)
     if inputs is None:
@@ -1278,7 +1160,5 @@ def _convert_ui_workflow(w: dict, node_inputs: dict):
 
     return r
 
+
 _control_after_generate = ["fixed", "increment", "decrement", "randomize"]
-
-
-
