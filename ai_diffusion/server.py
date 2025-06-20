@@ -444,6 +444,8 @@ class Server:
             env = {}
             if self.backend is ServerBackend.cpu:
                 args.append("--cpu")
+                if self._installed_backend is ServerBackend.xpu:
+                    env["TORCH_DEVICE_BACKEND_AUTOLOAD"] = "0"  # see #1813
             elif self.backend is ServerBackend.directml:
                 args.append("--directml")
             if settings.server_arguments:
@@ -455,7 +457,7 @@ class Server:
 
             log.info(f"Starting server with python {' '.join(args)}")
             self._process = await create_process(
-                self._python_cmd, *args, cwd=self.comfy_dir, additional_env=env
+                self._python_cmd, *args, cwd=self.comfy_dir, additional_env=env, is_job=True
             )
 
             assert self._process.stdout is not None
